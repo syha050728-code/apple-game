@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>사과 숫자 퍼즐</title>
+<style>
+:root{font-family:Arial,'Malgun Gothic',sans-serif;color:#293b2b;background:#f4f7ed}*{box-sizing:border-box}body{margin:0;padding:30px 12px}.wrap{max-width:760px;margin:auto;text-align:center}h1{margin:0 0 8px;font-size:32px}p{line-height:1.5}.panel{display:flex;justify-content:center;gap:30px;align-items:center;margin:18px auto;font-size:20px;font-weight:bold}button{border:0;border-radius:9px;background:#387b4a;color:white;padding:12px 20px;font-weight:bold;cursor:pointer}.board{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:5px;padding:12px;border:3px solid #b3d0a3;border-radius:16px;background:#e4efd8;touch-action:none;user-select:none}.cell{aspect-ratio:1;display:flex;justify-content:center;align-items:center;font-size:clamp(13px,2.7vw,24px);font-weight:800;cursor:crosshair;border-radius:40% 40% 45% 45%;background:#ef6460;color:#fff;border:2px solid #d44d49;position:relative}.cell::before{content:' ';position:absolute;width:11px;height:5px;background:#4e8d48;top:-3px;left:51%;transform:rotate(-30deg);border-radius:90%}.cell.selected{background:#ffb84d;border-color:#d78a1b;box-shadow:0 0 0 2px #d78a1b}.cell.empty{background:transparent;border-color:transparent;cursor:default}.cell.empty::before{display:none}.status{min-height:26px;font-weight:bold;color:#3e6843;margin-top:14px}.hint{font-size:14px;color:#5c6c5c}@media(max-width:520px){.board{gap:3px;padding:6px}.cell{border-width:1px}.panel{gap:12px;font-size:16px}h1{font-size:26px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>🍎 사과 숫자 퍼즐</h1>
+<p>드래그로 직사각형을 선택하세요. 숫자의 합이 <strong>10</strong>이면 사과가 사라집니다!</p>
+<div class="panel"><span>점수: <span id="score">0</span></span><span>남은 시간: <span id="time">120</span>초</span><button id="restart">다시 시작</button></div>
+<div class="board" id="board" aria-label="숫자 사과 게임판"></div>
+<div class="status" id="status" aria-live="polite">사과를 선택해 보세요!</div>
+<p class="hint">사과 하나당 1점 · 제한 시간 120초</p>
+</div>
+<script>
+const ROWS=10,COLS=10,DURATION=120;
+const board=document.getElementById('board');
+const scoreEl=document.getElementById('score');
+const timeEl=document.getElementById('time');
+const statusEl=document.getElementById('status');
+let numbers=[],score=0,timeLeft=DURATION,timer=null,started=false,dragging=false,startCell=null,endCell=null;
+function idx(row,col){return row*COLS+col}
+function coords(i){return {row:Math.floor(i/COLS),col:i%COLS}}
+function selectedIndices(){
+ if(startCell===null||endCell===null)return [];
+ const a=coords(startCell),b=coords(endCell),out=[];
+ for(let r=Math.min(a.row,b.row);r<=Math.max(a.row,b.row);r++)for(let c=Math.min(a.col,b.col);c<=Math.max(a.col,b.col);c++)out.push(idx(r,c));
+ return out;
+}
+function render(){
+ board.innerHTML='';
+ const chosen=new Set(selectedIndices());
+ numbers.forEach((n,i)=>{
+  const el=document.createElement('div');
+  el.className='cell'+(n===null?' empty':'')+(chosen.has(i)&&n!==null?' selected':'');
+  el.textContent=n===null?'':String(n);
+  el.dataset.index=i;
+  board.appendChild(el);
+ });
+}
+function updateStatus(){
+ const picked=selectedIndices().filter(i=>numbers[i]!==null);
+ const sum=picked.reduce((total,i)=>total+numbers[i],0);
+ statusEl.textContent=picked.length?`선택한 사과 ${picked.length}개 · 합계 ${sum}`:'사과를 선택해 보세요!';
+}
+function beginTimer(){
+ if(started)return;
+ started=true;
+ timer=setInterval(()=>{
+  timeLeft--;timeEl.textContent=timeLeft;
+  if(timeLeft<=0){clearInterval(timer);timer=null;dragging=false;statusEl.textContent=`시간 종료! 최종 점수: ${score}점`;}
+ },1000);
+}
+function cellFromPoint(x,y){
+ const target=document.elementFromPoint(x,y);
+ const cell=target?.closest('.cell');
+ return cell&&board.contains(cell)?Number(cell.dataset.index):null;
+}
+board.addEventListener('pointerdown',e=>{
+ if(timeLeft<=0)return;
+ const i=cellFromPoint(e.clientX,e.clientY);
+ if(i===null)return;
+ e.preventDefault();beginTimer();dragging=true;startCell=i;endCell=i;
+ board.setPointerCapture(e.pointerId);render();updateStatus();
+});
+board.addEventListener('pointermove',e=>{
+ if(!dragging)return;
+ const i=cellFromPoint(e.clientX,e.clientY);
+ if(i!==null&&i!==endCell){endCell=i;render();updateStatus();}
+});
+function finishDrag(){
+ if(!dragging)return;
+ dragging=false;
+ const picked=selectedIndices().filter(i=>numbers[i]!==null);
+ const sum=picked.reduce((total,i)=>total+numbers[i],0);
+ if(picked.length&&sum===10){
+  picked.forEach(i=>numbers[i]=null);
+  score+=picked.length;scoreEl.textContent=score;
+  statusEl.textContent=`성공! 사과 ${picked.length}개를 제거했어요.`;
+ }else statusEl.textContent=`합계 ${sum} — 10이 아니에요. 다시 시도해 보세요.`;
+ startCell=null;endCell=null;render();
+ if(numbers.every(n=>n===null)){clearInterval(timer);statusEl.textContent=`모든 사과를 제거했어요! ${score}점`;timeLeft=0;}
+}
+board.addEventListener('pointerup',finishDrag);
+board.addEventListener('pointercancel',finishDrag);
+function restart(){
+ clearInterval(timer);timer=null;started=false;dragging=false;startCell=null;endCell=null;
+ score=0;timeLeft=DURATION;scoreEl.textContent=score;timeEl.textContent=timeLeft;
+ numbers=Array.from({length:ROWS*COLS},()=>Math.floor(Math.random()*9)+1);
+ statusEl.textContent='사과를 선택해 보세요!';render();
+}
+document.getElementById('restart').addEventListener('click',restart);
+restart();
+</script>
+</body>
+</html>
+
